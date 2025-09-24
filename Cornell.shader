@@ -157,6 +157,11 @@ Shader "myxy/Cornell"
                 return h;
             }
 
+            hit box_by_center_size(float3 center, float3 size, ray r, int material_id)
+            {
+                return box(center - size * 0.5, center + size * 0.5, r, material_id);
+            }
+
             bool is_hit(hit h)
             {
                 return length(h.normal) > 0;
@@ -214,6 +219,7 @@ Shader "myxy/Cornell"
                 h = comp(h, sphere(_GlassPos.xyz, 0.5, r, glass_id), r);
                 h = comp(h, anti_sphere(_GlassPos.xyz, 0.5, r, anti_glass_id), r);
                 h = comp(h, box(float3(-1,3.9,-1), float3(1,4,1), r, light_id), r);
+                h = comp(h, box_by_center_size(float3(0,0.25,1), float3(1,0.5,2), r, gray_id), r);
                 h = comp(h, plane(float3(0,0,0), float3(0,1,0), r, gray_id), r);
                 h = comp(h, plane(float3(0,4,0), float3(0,-1,0), r, gray_id), r);
                 h = comp(h, plane(float3(2,0,0), float3(-1,0,0), r, red_id), r);
