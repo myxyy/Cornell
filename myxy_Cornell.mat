@@ -30,9 +30,9 @@ Material:
     m_Ints: []
     m_Floats: []
     m_Colors:
-    - _BallPos: {r: 1, g: 0.5, b: 1, a: 1}
-    - _GlassPos: {r: 1, g: 0.5, b: -1, a: 1}
-    - _LightPos: {r: 0, g: 0.5, b: 0, a: 0}
-    - _Mirror2Pos: {r: -1, g: 0.5, b: 1, a: 1}
-    - _MirrorPos: {r: -1, g: 0.5, b: -1, a: 1}
+    - _BallPos: {r: 1, g: 3, b: 1, a: 1}
+    - _GlassPos: {r: 1, g: 3, b: -1, a: 1}
+    - _LightPos: {r: 0, g: 3, b: 0, a: 0}
+    - _Mirror2Pos: {r: -1, g: 3, b: 1, a: 1}
+    - _MirrorPos: {r: -1, g: 3, b: -1, a: 1}
   m_BuildTextureStacks: []
