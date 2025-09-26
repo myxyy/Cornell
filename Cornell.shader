@@ -18,6 +18,8 @@ Shader "myxy/Cornell"
         Pass
         {
             CGPROGRAM
+// Upgrade NOTE: excluded shader from OpenGL ES 2.0 because it uses non-square matrices
+#pragma exclude_renderers gles
             #pragma vertex vert
             #pragma fragment frag
 
@@ -142,16 +144,16 @@ Shader "myxy/Cornell"
                     h.position = r.origin + t * r.direction;
                     // compute normal
                     float3 p = h.position;
-                    if (abs(p.x - bmin.x) < 1e-4) h.normal = float3(-1,0,0);
+                    if      (abs(p.x - bmin.x) < 1e-4) h.normal = float3(-1,0,0);
                     else if (abs(p.x - bmax.x) < 1e-4) h.normal = float3(1,0,0);
                     else if (abs(p.y - bmin.y) < 1e-4) h.normal = float3(0,-1,0);
                     else if (abs(p.y - bmax.y) < 1e-4) h.normal = float3(0,1,0);
                     else if (abs(p.z - bmin.z) < 1e-4) h.normal = float3(0,0,-1);
                     else if (abs(p.z - bmax.z) < 1e-4) h.normal = float3(0,0,1);
                     else h.normal = float3(0,0,0);
+                    h.material = material;
+                    return h;
                 }
-                h.material = material;
-                return h;
             }
 
             hit box_by_center_size(float3 center, float3 size, ray r, float4 material)
@@ -234,20 +236,44 @@ Shader "myxy/Cornell"
                 float depth : SV_Depth;
             };
 
+            float2 f3h2(float3 p)
+            {
+                return frac(sin(mul(float2x3(
+                    12.9898, 78.233, 37.719,
+                    93.9898, 67.345, 45.719
+                ), p)) * float2(43758.5453, 24634.6345));
+            }
+
+            // two uniform randoms to a direction on the unit sphere
+            float3 h2d3(float2 p)
+            {
+                float z = p.x * 2 - 1;
+                float r = sqrt(1 - z * z);
+                float phi = p.y * 2 * UNITY_PI;
+                return float3(r * cos(phi), r * sin(phi), z);
+            }
+
+            float3 f3d3(float3 p)
+            {
+                return h2d3(f3h2(p));
+            }
+
             float3 trace(ray r, float seed=0)
             {
                 hit h;
                 float3 albedo = float3(1,1,1);
-                for (int i=0; i<4; i++)
+                for (int i=0; i<8; i++)
                 {
                     float k = 5e2;
                     //r.origin = floor(r.origin * k) / k;
                     //r.direction = normalize(floor(r.direction * k) / k);
                     h = world(r);
                     h.position = floor(h.position * k) / k;
+                    float3 eps = h.normal * 2 / k;
                     if (is_hit(h))
                     {
                         albedo *= h.material.xyz;
+                        float3 next_dir = r.direction;
                         if (h.material.w == light_id)
                         {
                             return albedo;
@@ -256,35 +282,31 @@ Shader "myxy/Cornell"
                         {
                             float refraction_index = h.material.w == glass_id ? 1.5 : 1.0/1.5;
                             float3 refract_dir = refract(r.direction, h.normal, 1/refraction_index);
-                            
-                            r.origin = h.position - h.normal * 1e-2;
-                            r.direction = refract_dir;
+                            next_dir = refract_dir;
                         }
                         else if (h.material.w == mirror_id)
                         {
                             float3 reflect_dir = reflect(r.direction, h.normal);
-                            r.origin = h.position + h.normal * 1e-4;
-                            r.direction = reflect_dir;
+                            next_dir = reflect_dir;
                         }
                         else if (h.material.w == lambert_id)
                         {
-                            float3 rand = normalize(float3(
-                                frac(sin(dot(h.position.xy, float2(12.9898,78.233) + i + seed)) * 44758.5453),
-                                frac(sin(dot(h.position.yz, float2(14.9898,79.233) + i + seed)) * 43758.5453),
-                                frac(sin(dot(h.position.zx, float2(13.9898,77.233) + i + seed)) * 42758.5453)
-                            ) * 2 - 1);
-                            rand = rand - dot(rand, h.normal) * h.normal + abs(dot(rand, h.normal)) * h.normal;
-                            r.origin = h.position + h.normal * 1e-4;
-                            r.direction = rand;
+                            float3 rand_dir = f3d3(seed * 0.12345 + h.position);
+                            rand_dir = rand_dir + 2 * saturate(-dot(rand_dir, h.normal)) * h.normal;
+                            next_dir = rand_dir;
                         }
+                        r.origin = h.position - eps * sign(dot(r.direction, next_dir));
+                        r.direction = next_dir;
                     }
                     else
                     {
-                        return albedo;
+                        return 0;
                     }
                 }
                 return albedo;
             }
+
+            #define NUM_RAYS 4
 
             frag_out frag (v2f i)
             {
@@ -306,12 +328,11 @@ Shader "myxy/Cornell"
                 o.depth = clipPos.z / clipPos.w;
 
                 float3 color = float3(0,0,0);
-                int count = 4;
-                for (int j=0; j<count; j++)
+                for (int j=0; j<NUM_RAYS; j++)
                 {
                     color += trace(r, j * 0.56365);
                 }
-                o.color = float4(color / count, 1.0);
+                o.color = float4(color / NUM_RAYS, 1.0);
                 return o;
             }
             ENDCG
