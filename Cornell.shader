@@ -18,8 +18,8 @@ Shader "myxy/Cornell"
         Pass
         {
             CGPROGRAM
-// Upgrade NOTE: excluded shader from OpenGL ES 2.0 because it uses non-square matrices
-#pragma exclude_renderers gles
+            // Upgrade NOTE: excluded shader from OpenGL ES 2.0 because it uses non-square matrices
+            #pragma exclude_renderers gles
             #pragma vertex vert
             #pragma fragment frag
 
@@ -57,10 +57,10 @@ Shader "myxy/Cornell"
             };
 
             static int light_id = 0;
-            static int lambert_id = 3;
-            static int mirror_id = 4;
-            static int glass_id = 6;
-            static int anti_glass_id = 7;
+            static int lambert_id = 1;
+            static int mirror_id = 2;
+            static int glass_id = 3;
+            static int anti_glass_id = 4;
 
             static hit none = {(float3)1e6, float3(0,0,0), float4(0,0,0,-1)};
 
@@ -79,22 +79,20 @@ Shader "myxy/Cornell"
                 float3 oc = r.origin - center;
                 float a = dot(r.direction, r.direction);
                 float b = 2.0 * dot(oc, r.direction);
-                float c = dot(oc, oc) - radius * radius;
+                float c = - radius * radius + dot(oc, oc);
                 float discriminant = b * b - 4 * a * c;
+                hit h = none;
                 if (discriminant > 0)
                 {
-                    hit h;
                     float t = (-b - sqrt(discriminant)) / (2.0 * a);
-                    if (t < 0)
+                    if (t > 0)
                     {
-                        return none;
+                        h.position = r.origin + t * r.direction;
+                        h.normal = normalize(h.position - center);
+                        h.material = material;
                     }
-                    h.position = r.origin + t * r.direction;
-                    h.normal = normalize(h.position - center);
-                    h.material = material;
-                    return h;
                 }
-                return none;
+                return h;
             }
 
             hit anti_sphere(float3 center, float radius, ray r, float4 material)
@@ -106,42 +104,36 @@ Shader "myxy/Cornell"
                 float3 oc = r.origin - center;
                 float a = dot(r.direction, r.direction);
                 float b = 2.0 * dot(oc, r.direction);
-                float c = dot(oc, oc) - radius * radius;
+                float c = - radius * radius + dot(oc, oc);
                 float discriminant = b * b - 4 * a * c;
+                hit h = none;
                 if (discriminant > 0)
                 {
-                    hit h;
                     float t = (-b + sqrt(discriminant)) / (2.0 * a);
-                    if (t < 0)
+                    if (t > 0)
                     {
-                        return none;
+                        h.position = r.origin + t * r.direction;
+                        h.normal = -normalize(h.position - center);
+                        h.material = material;
                     }
-                    h.position = r.origin + t * r.direction;
-                    h.normal = -normalize(h.position - center);
-                    h.material = material;
-                    return h;
                 }
-                return none;
+                return h;
             }
 
             // returns a hit record for the nearest intersection with the box
             hit box(float3 bmin, float3 bmax, ray r, float4 material)
             {
-                hit h;
-                float3 tmin = (bmin - r.origin) / r.direction;
-                float3 tmax = (bmax - r.origin) / r.direction;
+                hit h = none;
+                float3 rd = rcp(r.direction);
+                float3 tmin = (bmin - r.origin) * rd;
+                float3 tmax = (bmax - r.origin) * rd;
                 float3 t1 = min(tmin, tmax);
                 float3 t2 = max(tmin, tmax);
                 float t_near = max(max(t1.x, t1.y), t1.z);
                 float t_far = min(min(t2.x, t2.y), t2.z);
-                if (t_near > t_far || t_far < 0)
+                if (t_near < t_far && t_far > 0)
                 {
-                    return none;
-                }
-                else
-                {
-                    float t = t_near >= 0 ? t_near : t_far;
-                    h.position = r.origin + t * r.direction;
+                    h.position = t_near * r.direction + r.origin;
                     // compute normal
                     float3 p = h.position;
                     if      (abs(p.x - bmin.x) < 1e-4) h.normal = float3(-1,0,0);
@@ -152,8 +144,8 @@ Shader "myxy/Cornell"
                     else if (abs(p.z - bmax.z) < 1e-4) h.normal = float3(0,0,1);
                     else h.normal = float3(0,0,0);
                     h.material = material;
-                    return h;
                 }
+                return h;
             }
 
             hit box_by_center_size(float3 center, float3 size, ray r, float4 material)
@@ -161,14 +153,8 @@ Shader "myxy/Cornell"
                 return box(center - size * 0.5, center + size * 0.5, r, material);
             }
 
-            bool is_hit(hit h)
-            {
-                return length(h.normal) > 0;
-            }
-
             hit comp(hit h1, hit h2, ray r)
             {
-                //if (distance(h1.position, r.origin) < distance(h2.position, r.origin))
                 float3 d1 = h1.position - r.origin;
                 float3 d2 = h2.position - r.origin;
                 if (dot(d1, d1) < dot(d2, d2))
@@ -183,7 +169,7 @@ Shader "myxy/Cornell"
 
             hit plane(float3 p0, float3 n, ray r, float4 material)
             {
-                hit h;
+                hit h = none;
                 float denom = dot(n, r.direction);
                 if (denom < 0)
                 {
@@ -191,9 +177,8 @@ Shader "myxy/Cornell"
                     h.position = r.origin + t * r.direction;
                     h.normal = n;
                     h.material = material;
-                    return h;
                 }
-                return none;
+                return h;
             }
 
             hit world(ray r)
@@ -258,50 +243,42 @@ Shader "myxy/Cornell"
                 return h2d3(f3h2(p));
             }
 
+            #define REFLECT_COUNT 8
+
             float3 trace(ray r, float seed=0)
             {
                 hit h;
                 float3 albedo = float3(1,1,1);
-                for (int i=0; i<8; i++)
+                float k = 2e-3;
+                for (int i=0; i<REFLECT_COUNT; i++)
                 {
-                    float k = 5e2;
-                    //r.origin = floor(r.origin * k) / k;
-                    //r.direction = normalize(floor(r.direction * k) / k);
                     h = world(r);
-                    h.position = floor(h.position * k) / k;
-                    float3 eps = h.normal * 2 / k;
-                    if (is_hit(h))
+                    h.position = floor(h.position / k) * k;
+
+                    albedo *= h.material.xyz;
+                    float3 next_dir = r.direction;
+                    if (h.material.w == light_id)
                     {
-                        albedo *= h.material.xyz;
-                        float3 next_dir = r.direction;
-                        if (h.material.w == light_id)
-                        {
-                            return albedo;
-                        }
-                        else if (h.material.w == glass_id || h.material.w == anti_glass_id)
-                        {
-                            float refraction_index = h.material.w == glass_id ? 1.5 : 1.0/1.5;
-                            float3 refract_dir = refract(r.direction, h.normal, 1/refraction_index);
-                            next_dir = refract_dir;
-                        }
-                        else if (h.material.w == mirror_id)
-                        {
-                            float3 reflect_dir = reflect(r.direction, h.normal);
-                            next_dir = reflect_dir;
-                        }
-                        else if (h.material.w == lambert_id)
-                        {
-                            float3 rand_dir = f3d3(seed * 0.12345 + h.position);
-                            rand_dir = rand_dir + 2 * saturate(-dot(rand_dir, h.normal)) * h.normal;
-                            next_dir = rand_dir;
-                        }
-                        r.origin = h.position - eps * sign(dot(r.direction, next_dir));
-                        r.direction = next_dir;
+                        break;
                     }
-                    else
+                    if (h.material.w == glass_id || h.material.w == anti_glass_id)
                     {
-                        return 0;
+                        float refraction_index = h.material.w == glass_id ? 1.5 : 1.0/1.5;
+                        next_dir = refract(r.direction, h.normal, 1/refraction_index);
                     }
+                    if (h.material.w == mirror_id)
+                    {
+                        next_dir = reflect(r.direction, h.normal);
+                    }
+                    if (h.material.w == lambert_id)
+                    {
+                        float3 rand_dir = f3d3(seed * 0.12345 + h.position);
+                        next_dir = rand_dir + 2 * saturate(-dot(rand_dir, h.normal)) * h.normal;
+                    }
+
+                    float3 eps = h.normal * 2 * k;
+                    r.origin = h.position - eps * sign(dot(r.direction, next_dir));
+                    r.direction = next_dir;
                 }
                 return albedo;
             }
@@ -310,20 +287,13 @@ Shader "myxy/Cornell"
 
             frag_out frag (v2f i)
             {
-                ray r;
                 frag_out o;
+
+                ray r;
                 r.origin = _WorldSpaceCameraPos;
                 r.direction = normalize(i.wpos - _WorldSpaceCameraPos);
-                fixed4 col = tex2D(_MainTex, i.uv);
+
                 hit depth = world(r);
-                if (is_hit(depth))
-                {
-                    col = fixed4(depth.normal * 0.5 + 0.5, 1.0);
-                }
-                else
-                {
-                    discard;
-                }
                 float4 clipPos = UnityObjectToClipPos(mul(unity_WorldToObject, float4(depth.position,1.0)));
                 o.depth = clipPos.z / clipPos.w;
 
@@ -333,6 +303,7 @@ Shader "myxy/Cornell"
                     color += trace(r, j * 0.56365);
                 }
                 o.color = float4(color / NUM_RAYS, 1.0);
+
                 return o;
             }
             ENDCG
