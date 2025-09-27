@@ -70,50 +70,21 @@ Shader "myxy/Cornell"
             float4 _Mirror2Pos;
             float4 _GlassPos;
 
-            hit sphere(float3 center, float radius, ray r, float4 material)
+            hit sphere(float3 center, float radius, ray r, float4 material, bool reverse=false)
             {
-                if (distance(r.origin, center) < radius)
-                {
-                    return none;
-                }
                 float3 oc = r.origin - center;
                 float a = dot(r.direction, r.direction);
                 float b = 2.0 * dot(oc, r.direction);
                 float c = - radius * radius + dot(oc, oc);
                 float discriminant = b * b - 4 * a * c;
                 hit h = none;
-                if (discriminant > 0)
+                if (discriminant > 0 && (radius - distance(r.origin, center)) * (reverse ? -1 : 1) < 0)
                 {
-                    float t = (-b - sqrt(discriminant)) / (2.0 * a);
+                    float t = (-b - sqrt(discriminant) * (reverse ? -1 : 1)) / (2.0 * a);
                     if (t > 0)
                     {
                         h.position = r.origin + t * r.direction;
-                        h.normal = normalize(h.position - center);
-                        h.material = material;
-                    }
-                }
-                return h;
-            }
-
-            hit anti_sphere(float3 center, float radius, ray r, float4 material)
-            {
-                if (distance(r.origin, center) > radius)
-                {
-                    return none;
-                }
-                float3 oc = r.origin - center;
-                float a = dot(r.direction, r.direction);
-                float b = 2.0 * dot(oc, r.direction);
-                float c = - radius * radius + dot(oc, oc);
-                float discriminant = b * b - 4 * a * c;
-                hit h = none;
-                if (discriminant > 0)
-                {
-                    float t = (-b + sqrt(discriminant)) / (2.0 * a);
-                    if (t > 0)
-                    {
-                        h.position = r.origin + t * r.direction;
-                        h.normal = -normalize(h.position - center);
+                        h.normal = normalize(h.position - center) * (reverse ? -1 : 1);
                         h.material = material;
                     }
                 }
@@ -190,7 +161,7 @@ Shader "myxy/Cornell"
                 h = comp(h, sphere(_MirrorPos.xyz, 0.5, r, float4(1,1,1,mirror_id)), r);
                 h = comp(h, sphere(_Mirror2Pos.xyz, 0.5, r, float4(1,0.2,0.2,mirror_id)), r);
                 h = comp(h, sphere(_GlassPos.xyz, 0.5, r, float4(0.8,0.9,1.0,glass_id)), r);
-                h = comp(h, anti_sphere(_GlassPos.xyz, 0.5, r, float4(1,1,1,anti_glass_id)), r);
+                h = comp(h, sphere(_GlassPos.xyz, 0.5, r, float4(1,1,1,anti_glass_id), true), r);
                 h = comp(h, box(float3(-1,3.9,-1), float3(1,4,1), r, float4(light,light_id)), r);
                 h = comp(h, box_by_center_size(float3(0,0.25,1), float3(1,0.5,2), r, float4(1,1,1,lambert_id)), r);
                 h = comp(h, box_by_center_size(float3(0,0.25,0.8), float3(1.1,0.6,1.6), r, float4(1,0.5,0.5,lambert_id)), r);
@@ -283,7 +254,7 @@ Shader "myxy/Cornell"
                 return albedo;
             }
 
-            #define NUM_RAYS 4
+            #define NUM_RAYS 3
 
             frag_out frag (v2f i)
             {
@@ -300,7 +271,7 @@ Shader "myxy/Cornell"
                 float3 color = float3(0,0,0);
                 for (int j=0; j<NUM_RAYS; j++)
                 {
-                    color += trace(r, j * 0.56365);
+                    color += trace(r, j);
                 }
                 o.color = float4(color / NUM_RAYS, 1.0);
 
