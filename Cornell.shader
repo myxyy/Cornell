@@ -8,6 +8,7 @@ Shader "myxy/Cornell"
         _MirrorPos ("Mirror Position", Vector) = (-1, 0.5, -1, 1)
         _Mirror2Pos ("Mirror2 Position", Vector) = (-1, 0.5, 1, 1)
         _GlassPos ("Glass Position", Vector) = (1, 0.5, -1, 1)
+        _LightIntensity ("Light Intensity", Range(0, 1)) = 1
     }
     SubShader
     {
@@ -69,6 +70,7 @@ Shader "myxy/Cornell"
             float4 _MirrorPos;
             float4 _Mirror2Pos;
             float4 _GlassPos;
+            float _LightIntensity;
 
             hit sphere(float3 center, float radius, ray r, float4 material, bool reverse=false)
             {
@@ -162,7 +164,7 @@ Shader "myxy/Cornell"
                 h = comp(h, sphere(_Mirror2Pos.xyz, 0.5, r, float4(1,0.2,0.2,mirror_id)), r);
                 h = comp(h, sphere(_GlassPos.xyz, 0.5, r, float4(0.8,0.9,1.0,glass_id)), r);
                 h = comp(h, sphere(_GlassPos.xyz, 0.5, r, float4(1,1,1,anti_glass_id), true), r);
-                h = comp(h, box(float3(-1,3.9,-1), float3(1,4,1), r, float4(light,light_id)), r);
+                h = comp(h, box(float3(-1,3.9,-1), float3(1,4,1), r, float4(light * _LightIntensity,light_id)), r);
                 h = comp(h, box_by_center_size(float3(0,0.25,1), float3(1,0.5,2), r, float4(1,1,1,lambert_id)), r);
                 h = comp(h, box_by_center_size(float3(0,0.25,0.8), float3(1.1,0.6,1.6), r, float4(1,0.5,0.5,lambert_id)), r);
                 h = comp(h, plane(float3(0,0,0), float3(0,1,0), r, float4(gray,lambert_id)), r);
@@ -230,7 +232,7 @@ Shader "myxy/Cornell"
                     float3 next_dir = r.direction;
                     if (h.material.w == light_id)
                     {
-                        break;
+                        return albedo;
                     }
                     if (h.material.w == glass_id || h.material.w == anti_glass_id)
                     {
@@ -251,10 +253,10 @@ Shader "myxy/Cornell"
                     r.origin = h.position - eps * sign(dot(r.direction, next_dir));
                     r.direction = next_dir;
                 }
-                return albedo;
+                return 0;
             }
 
-            #define NUM_RAYS 3
+            #define NUM_RAYS 4
 
             frag_out frag (v2f i)
             {
