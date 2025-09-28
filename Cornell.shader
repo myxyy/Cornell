@@ -156,23 +156,23 @@ Shader "myxy/Cornell"
 
             hit world(ray r)
             {
-                float3 gray = float3(0.8,0.8,0.8);
-                float3 light = float3(2,1.5,1) * 3;
-                hit h = sphere(_LightPos.xyz, 0.5, r, float4(light,light_id));
-                h = comp(h, sphere(_BallPos.xyz, 0.5, r, float4(gray,lambert_id)), r);
-                h = comp(h, sphere(_MirrorPos.xyz, 0.5, r, float4(1,1,1,mirror_id)), r);
+                float3 baige = float3(0.9,0.8,0.7);
+                float3 white = float3(1,1,1);
+                hit h = sphere(_LightPos.xyz, 0.5, r, float4(white,light_id + 0.999));
+                h = comp(h, sphere(_BallPos.xyz, 0.5, r, float4(white,lambert_id)), r);
+                h = comp(h, sphere(_MirrorPos.xyz, 0.5, r, float4(white,mirror_id)), r);
                 h = comp(h, sphere(_Mirror2Pos.xyz, 0.5, r, float4(1,0.2,0.2,mirror_id)), r);
                 h = comp(h, sphere(_GlassPos.xyz, 0.5, r, float4(0.8,0.9,1.0,glass_id)), r);
-                h = comp(h, sphere(_GlassPos.xyz, 0.5, r, float4(1,1,1,anti_glass_id), true), r);
-                h = comp(h, box(float3(-1,3.9,-1), float3(1,4,1), r, float4(light * _LightIntensity,light_id)), r);
+                h = comp(h, sphere(_GlassPos.xyz, 0.5, r, float4(white,anti_glass_id), true), r);
+                h = comp(h, box(float3(-1,3.9,-1), float3(1,4,1), r, float4(white,light_id + min(_LightIntensity, 0.999))), r);
                 h = comp(h, box_by_center_size(float3(0,0.25,1), float3(1,0.5,2), r, float4(1,1,1,lambert_id)), r);
                 h = comp(h, box_by_center_size(float3(0,0.25,0.8), float3(1.1,0.6,1.6), r, float4(1,0.5,0.5,lambert_id)), r);
-                h = comp(h, plane(float3(0,0,0), float3(0,1,0), r, float4(gray,lambert_id)), r);
-                h = comp(h, plane(float3(0,4,0), float3(0,-1,0), r, float4(gray,lambert_id)), r);
+                h = comp(h, plane(float3(0,0,0), float3(0,1,0), r, float4(baige,lambert_id)), r);
+                h = comp(h, plane(float3(0,4,0), float3(0,-1,0), r, float4(baige,lambert_id)), r);
                 h = comp(h, plane(float3(2,0,0), float3(-1,0,0), r, float4(1,0.2,0.2,lambert_id)), r);
                 h = comp(h, plane(float3(-2,0,0), float3(1,0,0), r, float4(0.2,0.2,1,lambert_id)), r);
-                h = comp(h, plane(float3(0,0,2), float3(0,0,-1), r, float4(gray,lambert_id)), r);
-                h = comp(h, plane(float3(0,0,-2), float3(0,0,1), r, float4(gray,lambert_id)), r);
+                h = comp(h, plane(float3(0,0,2), float3(0,0,-1), r, float4(baige,lambert_id)), r);
+                h = comp(h, plane(float3(0,0,-2), float3(0,0,1), r, float4(baige,lambert_id)), r);
                 return h;
             }
 
@@ -202,6 +202,11 @@ Shader "myxy/Cornell"
                 ), p)) * float2(43758.5453, 24634.6345));
             }
 
+            float f3h1(float3 p)
+            {
+                return frac(sin(dot(p, float3(12.9898, 78.233, 37.719))) * 43758.5453);
+            }
+
             // two uniform randoms to a direction on the unit sphere
             float3 h2d3(float2 p)
             {
@@ -221,18 +226,21 @@ Shader "myxy/Cornell"
             float3 trace(ray r, float seed=0)
             {
                 hit h;
-                float3 albedo = float3(1,1,1);
                 float k = 2e-3;
+                float3 albedo_list[REFLECT_COUNT];
+                float3 light_list[REFLECT_COUNT];
                 for (int i=0; i<REFLECT_COUNT; i++)
                 {
                     h = world(r);
                     h.position = floor(h.position / k) * k;
 
-                    albedo *= h.material.xyz;
+                    albedo_list[i] = h.material.xyz;
+                    light_list[i] = float3(0,0,0);
                     float3 next_dir = r.direction;
-                    if (h.material.w == light_id)
+                    if (floor(h.material.w) == light_id)
                     {
-                        return albedo;
+                        light_list[i] = h.material.xyz * frac(h.material.w);
+                        h.material.w = lambert_id;
                     }
                     if (h.material.w == glass_id || h.material.w == anti_glass_id)
                     {
@@ -246,17 +254,28 @@ Shader "myxy/Cornell"
                     if (h.material.w == lambert_id)
                     {
                         float3 rand_dir = f3d3(seed * 0.12345 + h.position);
-                        next_dir = rand_dir + 2 * saturate(-dot(rand_dir, h.normal)) * h.normal;
+                        if (f3h1(h.position + seed * .5255) < 0.5) rand_dir = normalize(float3(0,4,0) + rand_dir - h.position);
+                        //if (f3h1(h.position + seed * .5255) < 0.1) rand_dir = normalize(_LightPos + rand_dir - h.position);
+                        float dot_r_n = dot(rand_dir, h.normal);
+                        next_dir = rand_dir + 2 * saturate(-dot_r_n) * h.normal;
+                        albedo_list[i] *= dot_r_n * 2;
                     }
 
                     float3 eps = h.normal * 2 * k;
                     r.origin = h.position - eps * sign(dot(r.direction, next_dir));
                     r.direction = next_dir;
                 }
-                return 0;
+
+                float3 light = float3(0,0,0);
+                for (int j=REFLECT_COUNT-1; j>=0; j--)
+                {
+                    light *= albedo_list[j];
+                    light += light_list[j];
+                }
+                return light;
             }
 
-            #define NUM_RAYS 4
+            #define NUM_RAYS 2
 
             frag_out frag (v2f i)
             {
@@ -275,7 +294,7 @@ Shader "myxy/Cornell"
                 {
                     color += trace(r, j);
                 }
-                o.color = float4(color / NUM_RAYS, 1.0);
+                o.color = float4(saturate(color / NUM_RAYS), 1.0);
 
                 return o;
             }
