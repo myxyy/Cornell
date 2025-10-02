@@ -254,11 +254,15 @@ Shader "myxy/Cornell"
                     if (h.material.w == lambert_id)
                     {
                         float3 rand_dir = f3d3(seed * 0.12345 + h.position);
-                        if (f3h1(h.position + seed * .5255) < 0.5) rand_dir = normalize(float3(0,4,0) + rand_dir - h.position);
+                        if (f3h1(h.position + seed * .5255) < 0.75)
+                        {
+                            float3 light_pos = (f3h1(h.position + seed * .52626) < _LightIntensity ? float3(0,4,0) : _LightPos.xyz) + rand_dir;
+                            rand_dir = normalize(light_pos - h.position);
+                        }
                         //if (f3h1(h.position + seed * .5255) < 0.1) rand_dir = normalize(_LightPos + rand_dir - h.position);
                         float dot_r_n = dot(rand_dir, h.normal);
                         next_dir = rand_dir + 2 * saturate(-dot_r_n) * h.normal;
-                        albedo_list[i] *= dot_r_n * 2;
+                        albedo_list[i] *= dot(next_dir, h.normal) * 2;
                     }
 
                     float3 eps = h.normal * 2 * k;
@@ -275,7 +279,7 @@ Shader "myxy/Cornell"
                 return light;
             }
 
-            #define NUM_RAYS 2
+            #define NUM_RAYS 1
 
             frag_out frag (v2f i)
             {
