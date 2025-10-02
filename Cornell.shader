@@ -262,7 +262,7 @@ Shader "myxy/Cornell"
                         //if (f3h1(h.position + seed * .5255) < 0.1) rand_dir = normalize(_LightPos + rand_dir - h.position);
                         float dot_r_n = dot(rand_dir, h.normal);
                         next_dir = rand_dir + 2 * saturate(-dot_r_n) * h.normal;
-                        albedo_list[i] *= dot(next_dir, h.normal) * 2;
+                        albedo_list[i] *= dot(next_dir, h.normal);
                     }
 
                     float3 eps = h.normal * 2 * k;
